@@ -1,0 +1,71 @@
+install.packages('rvest')
+install.packages('lubridate')
+
+
+library('rvest') #read_html
+library('lubridate') #for month() for url loop
+
+
+
+df <- data.frame(matrix(ncol = 3, nrow = 0)) #Set up dataframe to hold article text
+
+colnames(df) <- c("date", "text", "paper")
+
+paper <- c("https://dailyherald.newspaperarchive.com/daily-herald-suburban-chicago/") #list of papers to scrape. If using multiple 
+
+
+
+start <- as.Date("01-07-2001",format="%d-%m-%Y") #Starting Article Date
+end <- as.Date("02-10-2001",format="%d-%m-%Y") #Starting Article Date
+
+
+i = 1 
+j = 1
+
+
+while (start <= end){ 
+  
+  
+  #Change day formating 
+  numday <- day(start)
+  if(nchar(numday) == 1){
+    numday <- paste("0",numday, sep = "")
+  }
+  
+  #Change month formating
+  nummonth <- month(start)
+  if(nchar(nummonth) == 1){
+    nummonth <- paste("0",nummonth, sep = "")
+  }
+  
+  url <- paste(paper[j],year(start),"-",nummonth,"-",numday, sep = "") #Make sure this results in the URL you are trying to access
+  
+  Sys.sleep( sample.int(3,1,replace = TRUE)) #Slow down scraping to not overwhelm website
+  
+  
+  pg <- read_html(url)
+  text <- xml_find_all(pg,'//*[@id="frmbdy"]/div[1]/div[2]/div/div/div[3]/div[3]/div' ) #Xpath location of text on page. May need to change if website changes format
+  texturl <- html_text(text,"href")
+  texturl <- gsub(pattern = "\r", replacement = "",texturl)
+  texturl <- gsub(pattern = "\n", replacement = "",texturl)
+  if( identical(texturl, character(0))){
+    print(url)
+    print(identical(texturl, character(0)))
+    start <- start + 7  
+    next          
+  }
+  
+  df[i, ] <- list(paste(month(start),"-",day(start),"-",year(start),sep = ""), texturl, paper[j])
+  
+  print(url)
+  print(start)
+  print(texturl)
+  start <- start + 7 #Increase Date by one week. Scraper only gets paper from a certain day of the week. Can change to +1 if you want every day
+  i = i  + 1
+}
+
+setwd("C:/") #Save Data Frame
+
+write.csv(df, "all_news.csv")
+
+

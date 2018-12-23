@@ -1,0 +1,24 @@
+#https://fred.stlouisfed.org/graph/?id=GS10,GS5,GS2,GS30,GS1M,GS20,GS3M,GS3,GS7,FII5,FII30,GS1,GS6M,FII7,FII20,FII10,
+
+setwd("C:/Users/eesy2_000/Documents/MBA/Independent Study/R")
+data <- read.csv("yield.csv")
+
+
+time <- c(.083,.25,1,2,3,5,7,10,20,30) #Yield time in years
+
+timesq <- c(.083^2*.05,.25^2*.05,1^2*.05,2^2*.05,3^2*.05,5^2*.05,7^2*.05,10^2*.05,20^2*.05,30^2*.05) #For data transformation to nonlinear
+
+x <- nrow(data)
+
+for (i in 1:x) {
+  
+  list <- unlist(data[i,c(2,3,4,5,6,7,8,9,10,11)])
+  model <- lm(list ~ time + timesq, na.action=na.exclude )
+  data[i,12] <- summary(model)$coefficients[2, 1]
+  data[i,13] <- summary(model)$coefficients[3, 1]
+  data[i,14] <- summary(model)$coefficients[1, 1]
+  print(i)
+}
+
+
+write.csv(data, "regression.csv")

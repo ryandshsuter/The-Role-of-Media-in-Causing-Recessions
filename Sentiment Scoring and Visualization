@@ -1,0 +1,294 @@
+library(tm) # corpus()
+library(wordcloud) #wordcloud()
+library(stringr) 
+library(dplyr)
+library(plyr)
+library('lubridate') #for month()
+library(ggplot2)
+library(scales) #dateformat()
+
+
+
+setwd("C:/")
+
+papertext <- read.csv("all_news.csv") #Import data from scraper format DF c(Row number,date,News paper text)
+
+#Sentiment files can be found http://www.sca.isr.umich.edu/tables.html
+
+
+#Clean data
+
+text=papertext$text
+text <- gsub("- ", " ", text) #remove OCR error
+text=lapply(text, function(x) iconv(x, "latin1", "ASCII", sub=""))
+text <- gsub("@.*?\\s", " ", text) #remove @
+text = gsub('[[:punct:]]', ' ', text) #remove punct
+text = gsub('[[:cntrl:]]', ' ', text) #remove control characters
+text = gsub("amp", ' ', text) #remove control characters
+text = gsub("  "," ",text) #Change double spaces to single spaces
+text = gsub('Newspaper Article Text (OCR)', '', text) #remove header
+text = gsub('Daily Herald Suburban Chicago (Newspaper)', '', text) #remove header
+text=unlist(text)
+papertext$text=text
+
+papertext <- papertext[!(grepl("^\\s*$", papertext$text)), ] #remove rows with no text (All spaces)
+
+# Sentiment score 
+
+pos = scan('poswordlist.csv', what='character', comment.char=';') #Get lists of positive and negative words, found on http://www.sca.isr.umich.edu/tables.html
+pos <- tolower(pos)
+
+neg = scan('negwordlist.csv', what='character', comment.char=';')
+neg <- tolower(neg)
+
+#Create function to identify positive or negative words
+
+score.sentiment = function(sentences, pos.words, neg.words, .progress='none')
+  
+{
+  
+  require(plyr)
+  
+  require(stringr)
+  
+  scores = laply(sentences, function(sentence, pos.words, neg.words) { # clean up sentences with R's regex-driven global substitute, gsub():
+    
+    sentence = gsub('[[:punct:]]', '', sentence)
+    
+    sentence = gsub('[[:cntrl:]]', '', sentence)
+    
+    sentence = gsub('d+', '', sentence)
+    
+    # sentence <- str_replace_all(sentence, "Join","")   #??
+    
+    
+    
+    sentence = tolower(sentence)  # convert to lower case:
+    
+    word.list = str_split(sentence, '\\s+')   # split into words. str_split is in the stringr package
+    
+    words = unlist(word.list)   # sometimes a list() is one level of hierarchy too much
+    
+    pos.matches = match(words, pos.words) # compare our words to the dictionaries of positive & negative terms 
+    
+    neg.matches = match(words, neg.words) # match() returns the position of the matched term or NA
+    
+    pos.matches = !is.na(pos.matches)  # we just want a TRUE/FALSE:
+    
+    neg.matches = !is.na(neg.matches)
+    
+    score = sum(pos.matches) - sum(neg.matches)   # and conveniently enough, TRUE/FALSE will be treated as 1/0 by sum():
+    
+    return(score)
+    
+  }, pos.words, neg.words, .progress=.progress )
+  
+  scores.df = data.frame(score=scores, text=sentences)
+  
+  return(scores.df)
+  
+}
+
+score.possentiment = function(sentences, pos.words, neg.words, .progress='none')
+  
+{
+  
+  require(plyr)
+  
+  require(stringr)
+  
+  scores = laply(sentences, function(sentence, pos.words, neg.words) { # clean up sentences with R's regex-driven global substitute, gsub():
+    
+    sentence = gsub('[[:punct:]]', '', sentence)
+    
+    sentence = gsub('[[:cntrl:]]', '', sentence)
+    
+    sentence = gsub('d+', '', sentence)
+    
+    # sentence <- str_replace_all(sentence, "Join","")   #??
+    
+    
+    
+    sentence = tolower(sentence)  # convert to lower case:
+    
+    word.list = str_split(sentence, '\\s+')   # split into words. str_split is in the stringr package
+    
+    words = unlist(word.list)   # sometimes a list() is one level of hierarchy too much
+    
+    pos.matches = match(words, pos.words) # compare our words to the dictionaries of positive & negative terms 
+    
+    pos.matches = !is.na(pos.matches)  # we just want a TRUE/FALSE:
+    
+    
+    score = sum(pos.matches)  # and conveniently enough, TRUE/FALSE will be treated as 1/0 by sum():
+    
+    
+    
+    return(score)
+    
+  }, pos.words, neg.words, .progress=.progress )
+  
+  scores.df = data.frame(score=scores, text=sentences)
+  
+  return(scores.df)
+  
+}
+
+score.negsentiment = function(sentences, pos.words, neg.words, .progress='none')
+  
+{
+  
+  require(plyr)
+  
+  require(stringr)
+  
+  scores = laply(sentences, function(sentence, pos.words, neg.words) { # clean up sentences with R's regex-driven global substitute, gsub():
+    
+    sentence = gsub('[[:punct:]]', '', sentence)
+    
+    sentence = gsub('[[:cntrl:]]', '', sentence)
+    
+    sentence = gsub('d+', '', sentence)
+    
+    # sentence <- str_replace_all(sentence, "Join","")   #??
+    
+    
+    sentence = tolower(sentence)  # convert to lower case:
+    
+    word.list = str_split(sentence, '\\s+')   # split into words. str_split is in the stringr package
+    
+    words = unlist(word.list)   # sometimes a list() is one level of hierarchy too much
+    
+    neg.matches = match(words, neg.words) # compare our words to the dictionaries of positive & negative terms 
+    
+    neg.matches = !is.na(neg.matches)  # we just want a TRUE/FALSE:
+    
+    score = sum(neg.matches)  # and conveniently enough, TRUE/FALSE will be treated as 1/0 by sum():
+    
+    return(score)
+    
+  }, pos.words, neg.words, .progress=.progress )
+  
+  scores.df = data.frame(score=scores, text=sentences)
+  
+  return(scores.df)
+  
+}
+
+
+#Use function on data
+analysisneg = score.negsentiment(papertext$text, pos, neg)
+analysispos = score.possentiment(papertext$text, pos, neg)
+
+papertext$neg <- analysisneg$score
+papertext$pos <- analysispos$score
+
+
+mean <- mean(analysisneg$score) #Calculate Mean
+row <- nrow(analysisneg)
+
+#Create histogram 
+
+title <- paste("Sentiment of", row, "news papers")
+hist(analysisneg$score,breaks=seq(0,100,by=5),xlab=c("Average Neg Sentiment",round(mean, digits = 3)),main=title,
+     border="black",col="skyblue", ylab="frequency")
+
+abline(v = mean, col = "blue", lwd = 2)
+
+hist(analysispos$score,breaks=seq(0,100,by=5),xlab=c("Average Pos Sentiment",round(mean, digits = 3)),main=title,
+     border="black",col="skyblue", ylab="frequency")
+
+######### Word cloud
+
+#Clean text
+
+papertext$text <- str_replace_all(papertext$text, "Join","") #Change data somehow
+
+corpus=Corpus(VectorSource(papertext$text)) # Create corpus
+
+corpus=tm_map(corpus,tolower) # Convert to lower-case
+
+corpus=tm_map(corpus,PlainTextDocument) # convert corpus to a Plain Text Document
+
+corpus=tm_map(corpus,function(x) removeWords(x,stopwords())) # Remove stopwords   
+
+corpus <- Corpus(VectorSource(corpus))
+
+#Format data
+
+tdm <- TermDocumentMatrix(corpus)  
+
+matrix <- as.matrix(tdm)  # changed to term.matrix
+v <- sort(rowSums(matrix),decreasing=TRUE)
+d <- data.frame(word = names(v),freq=v)
+warnings(wordcloud(d$word, in.freq=100, max.words = 100))
+
+#Run word cloud
+
+col=brewer.pal(6,"Dark2")
+warnings(wordcloud(corpus, min.freq=1000,scale=c(1,.1), rot.per = 0.25,
+                   random.color=T, max.word=300, random.order=F,colors=col))
+
+#### Graph negative/positive words over time
+
+papertext$dates <- as.Date(papertext$date,format="%m/%d/%Y")
+papertext$month <- month(papertext$date) 
+papertext$year <- year(papertext$date)
+
+options(stringsAsFactors = FALSE)
+
+papertext$neg <- papertext$neg +0
+
+ggplot(data = papertext,
+       aes(dates, neg))+
+  stat_summary(fun.y = sum, # adds up all observations for the month
+               geom = "bar")+ # or "line"
+  
+  scale_x_date(date_breaks = "1 year") # custom x-axis labels
+
+
+#Save data
+
+papertext$month <- month(papertext$dates)
+papertext$year <- year(papertext$dates)
+
+write.csv(papertext,"sentiment2.csv")
+
+
+
+#### average months
+
+#set up dataframe
+df <- data.frame("month" = NA , "year" = NA , "avgsent" = NA)
+
+y = 1960
+m = 1
+x = 1
+
+for (i in 1:58){
+  m = 1
+  for (j in 0:11){
+    
+    df[x,2] <- y
+    df[x,1] <- m
+    
+    
+    m <- m + 1
+    print(y)
+    print(m)
+    x = x + 1
+  }
+  y <- y+1
+}
+
+
+#Graph average monthly neg/pos
+
+df2 <- ddply(papertext, .(month,year), summarize, pos = mean(pos/neg) )
+
+ggplot(data = df2,
+       aes(year, pos))+
+  stat_summary(fun.y = sum, # adds up all observations for the month
+               geom = "line")
+
+   scale_x_date(date_breaks = "1 year") # custom x-axis labels

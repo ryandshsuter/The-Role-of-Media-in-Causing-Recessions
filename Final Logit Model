@@ -1,0 +1,28 @@
+setwd("C:/")
+
+library(data.table)
+
+df <- read.csv("final3.csv")
+ 
+df$sratio <- df$NegS/(df$PosS) # .5 high pos score - 5 is high negative score
+
+
+df$sratio_2 <- shift(df$sratio, n=2)
+
+df$Slope_6 <- shift(df$Slope, n=6)
+
+
+mylogit <- glm(NBER ~ sratio_2 +S.P +Emp	+ Slope_6 + Constant + Curve	+ISM+	M.Sent-1, family = binomial(link = "logit"), data = df[,3:20]) #3:20
+
+mylogit <- glm(NBER ~ PosS	+S.P + Emp+ Slope_6 + Curve	+ISM+	M.Sent-1, family = binomial(link = "logit"), data = df[,3:20]) 
+
+mylogitnull <- glm(NBER ~ 1, family = binomial(link = "probit"), data = df[,3:20]) # McFadden's R squared calculation 
+
+rsq <- 1-logLik(mylogit)/logLik(mylogitnull) # McFadden's R squared
+
+summary(mylogit)
+
+exp(coef(mylogit))
+
+rsq[1]
+
